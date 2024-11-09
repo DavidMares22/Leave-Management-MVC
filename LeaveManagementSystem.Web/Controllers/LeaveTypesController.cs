@@ -1,6 +1,6 @@
 ﻿using LeaveManagementSystem.Web.Common;
 using LeaveManagementSystem.Web.Models.LeaveTypes;
-using LeaveManagementSystem.Web.Services;
+using LeaveManagementSystem.Web.Services.LeaveTypes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;

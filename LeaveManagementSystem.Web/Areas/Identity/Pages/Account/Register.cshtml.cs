@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 #nullable disable
 
+using LeaveManagementSystem.Web.Services.LeaveAllocations;
 using Microsoft.EntityFrameworkCore;
 
 namespace LeaveManagementSystem.Web.Areas.Identity.Pages.Account
@@ -10,6 +11,7 @@ namespace LeaveManagementSystem.Web.Areas.Identity.Pages.Account
     {
         private readonly SignInManager<ApplicationUser> _signInManager;
         private readonly RoleManager<IdentityRole> _roleManager;
+        private readonly ILeaveAllocationsService _leaveAllocationsService;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IUserStore<ApplicationUser> _userStore;
         private readonly IUserEmailStore<ApplicationUser> _emailStore;
@@ -17,6 +19,7 @@ namespace LeaveManagementSystem.Web.Areas.Identity.Pages.Account
         private readonly IEmailSender _emailSender;
 
         public RegisterModel(
+            ILeaveAllocationsService leaveAllocationsService,
             UserManager<ApplicationUser> userManager,
             IUserStore<ApplicationUser> userStore,
             SignInManager<ApplicationUser> signInManager,
@@ -24,6 +27,7 @@ namespace LeaveManagementSystem.Web.Areas.Identity.Pages.Account
             ILogger<RegisterModel> logger,
             IEmailSender emailSender)
         {
+            this._leaveAllocationsService = leaveAllocationsService;
             _userManager = userManager;
             _userStore = userStore;
             _emailStore = GetEmailStore();
@@ -39,9 +43,6 @@ namespace LeaveManagementSystem.Web.Areas.Identity.Pages.Account
         /// </summary>
         [BindProperty]
         public InputModel Input { get; set; } = new InputModel();
-
-        public string[] RoleNames  { get; set; }
-
 
         /// <summary>
         ///     This API supports the ASP.NET Core Identity default UI infrastructure and is not intended to be used
@@ -90,12 +91,12 @@ namespace LeaveManagementSystem.Web.Areas.Identity.Pages.Account
             public string ConfirmPassword { get; set; }
 
             [Required]
-            [StringLength(100, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 3)]
+            [StringLength(100, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 6)]
             [Display(Name = "First Name")]
             public string FirstName { get; set; }
 
             [Required]
-            [StringLength(100, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 3)]
+            [StringLength(100, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 6)]
             [Display(Name = "Last Name")]
             public string LastName { get; set; }
 
@@ -103,9 +104,9 @@ namespace LeaveManagementSystem.Web.Areas.Identity.Pages.Account
             [DataType(DataType.Date)]
             [Display(Name = "Date Of Birth")]
             public DateOnly DateOfBirth { get; set; }
-           
-            [Required]
+
             public string RoleName { get; set; }
+            public string[] RoleNames { get; set; }
         }
 
 
@@ -113,13 +114,11 @@ namespace LeaveManagementSystem.Web.Areas.Identity.Pages.Account
         {
             ReturnUrl = returnUrl;
             ExternalLogins = (await _signInManager.GetExternalAuthenticationSchemesAsync()).ToList();
-            // we need to get the roles in order to display the radio buttons
-            // with select we can get just the name column instead of the entire object
             var roles = await _roleManager.Roles
                 .Select(q => q.Name)
                 .Where(q => q != "Administrator")
                 .ToArrayAsync();
-            RoleNames = roles;
+            Input.RoleNames = roles;
         }
 
         public async Task<IActionResult> OnPostAsync(string returnUrl = null)
@@ -129,13 +128,9 @@ namespace LeaveManagementSystem.Web.Areas.Identity.Pages.Account
             if (ModelState.IsValid)
             {
                 var user = CreateUser();
-                
-                // We are setting the username to be the email 
-                await _userStore.SetUserNameAsync(user, Input.Email, CancellationToken.None);
-                // We are setting the email to be the email
-                await _emailStore.SetEmailAsync(user, Input.Email, CancellationToken.None);
 
-                // we need to assign the input properties to user
+                await _userStore.SetUserNameAsync(user, Input.Email, CancellationToken.None);
+                await _emailStore.SetEmailAsync(user, Input.Email, CancellationToken.None);
                 user.DateOfBirth = Input.DateOfBirth;
                 user.FirstName = Input.FirstName;
                 user.LastName = Input.LastName;
@@ -156,6 +151,8 @@ namespace LeaveManagementSystem.Web.Areas.Identity.Pages.Account
                     }
 
                     var userId = await _userManager.GetUserIdAsync(user);
+                    await _leaveAllocationsService.AllocateLeave(userId);
+
                     var code = await _userManager.GenerateEmailConfirmationTokenAsync(user);
                     code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
                     var callbackUrl = Url.Page(
@@ -182,13 +179,8 @@ namespace LeaveManagementSystem.Web.Areas.Identity.Pages.Account
                     ModelState.AddModelError(string.Empty, error.Description);
                 }
             }
-            
+
             // If we got this far, something failed, redisplay form
-              var roles = await _roleManager.Roles
-                .Select(q => q.Name)
-                .Where(q => q != "Administrator")
-                .ToArrayAsync();
-            RoleNames = roles;
             return Page();
         }
 
